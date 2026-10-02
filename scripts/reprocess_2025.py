@@ -262,7 +262,7 @@ def main():
     ap.add_argument("--warmup-start", default="2024-12-01")
     ap.add_argument("--start", default="2025-01-01")
     ap.add_argument("--end", default="2026-01-01")
-    ap.add_argument("--profile", default="spotrank_jaeil")
+    ap.add_argument("--profile", help="AWS profile; default uses the environment or instance role")
     ap.add_argument("--workers", type=int, default=16)
     ap.add_argument("--compare-only", action="store_true", help="skip writing snapshots")
     ap.add_argument("--local-root", type=Path,

@@ -92,7 +92,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--build", required=True, type=Path)
     ap.add_argument("--dest", required=True)
-    ap.add_argument("--profile", default="spotrank_jaeil")
+    ap.add_argument("--profile", help="AWS profile; default uses the environment or instance role")
     ap.add_argument("--region", default="us-west-2")
     ap.add_argument("--workers", type=int, default=32)
     mode = ap.add_mutually_exclusive_group()
