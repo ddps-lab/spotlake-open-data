@@ -1,5 +1,5 @@
 #!/bin/bash
-# EC2 user-data: rebuild the 2025 snapshots next to the source buckets (us-west-2) and store the
+# EC2 user-data (on-demand recommended; a spot interruption restarts the replay): rebuild the 2025 snapshots next to the source buckets (us-west-2) and store the
 # result in a staging bucket. The instance shuts itself down when done (launch it with
 # --instance-initiated-shutdown-behavior terminate), and after MAX_MINUTES at the latest.
 #
@@ -24,8 +24,12 @@ trap finish EXIT
 
 export HOME=/root
 mkdir -p "$WORK" && cd "$WORK"
-# Upload the log every 10 minutes so a deadline shutdown does not lose it.
-( while sleep 600; do aws s3 cp --only-show-errors /var/log/reprocess.log "s3://$STAGING/logs/reprocess-running.log" || true; done ) &
+# Every 10 minutes upload the log and the snapshots written so far, so an interruption or the
+# deadline shutdown does not lose them.
+( while sleep 600; do
+    aws s3 cp --only-show-errors /var/log/reprocess.log "s3://$STAGING/logs/reprocess-running.log" || true
+    [ -d "$WORK/build/data" ] && aws s3 sync --only-show-errors --exclude "*.tmp" "$WORK/build/data/" "s3://$STAGING/data/" || true
+done ) &
 
 dnf install -y git python3.11 python3.11-pip
 git clone "$REPO" repo && git -C repo checkout "$COMMIT"

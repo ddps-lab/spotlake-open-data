@@ -73,7 +73,7 @@ Every file has the same 11 columns:
 
 Missing values are empty cells, which `pandas` reads as `NaN`. In `T2` and `T3`, `0` is not missing: it means no target capacity qualified.
 
-Prices and `IF` are refreshed every 10 minutes. Placement scores are carried forward between queries: target capacity 1 is queried every 10 minutes until 2025-02-14 and every 110 minutes after that, and a higher score at a larger target capacity can raise `SPS` at any 10-minute step. The dataset README explains the collection schedule and how `T2` and `T3` were recomputed.
+Prices and `IF` are refreshed every 10 minutes. Placement scores are carried forward between queries: target capacity 1 is queried every 10 minutes until 2025-02-12 and every 110 minutes after that, and a higher score at a larger target capacity can raise `SPS` at any 10-minute step. The dataset README explains the collection schedule and how `T2` and `T3` were recomputed.
 
 For analysis across many snapshots, Amazon Athena can query the CSV files in place, and AWS Glue can convert them to Parquet in your own account."""),
     md("""### Q: Can you show us an example of downloading and loading data from your dataset?
@@ -144,7 +144,7 @@ share.round(3)"""),
 
 Savings and placement scores are not simply aligned. The interruption frequency grade (`IF`) from the Spot Instance Advisor adds a third view, and the three signals often disagree for the same pool. SpotLake's papers discuss this in detail, and comparing the signals across time is a good way to start using the dataset.
 
-To scale this up, repeat the analysis over many snapshots. Loading all 52,372 objects takes about 17 GiB of transfer, so a common approach is to pick one snapshot per hour or per day, or to query the files with Amazon Athena."""),
+To scale this up, repeat the analysis over many snapshots. Loading all 52,372 objects takes about 18 GiB of transfer, so a common approach is to pick one snapshot per hour or per day, or to query the files with Amazon Athena."""),
     md("""### Q: What is one unanswered question that you think could be answered using these data? Do you have any recommendations or advice for someone wanting to answer this question?
 
 **Can we predict a drop in placement score before it happens?** Spot prices, interruption bands, and placement scores are recorded every 10 minutes for the same pools. A model that warns of an upcoming score drop, or a sharp price move, from the recent history of a pool and of its neighbours (same family in other AZs, other sizes in the same AZ) would directly help schedulers move work before capacity disappears.
@@ -153,7 +153,7 @@ Some advice:
 
 - Build time series per (`InstanceType`, `AZ`). Pools come and go, so expect gaps.
 - Treat empty cells as missing, not as low values.
-- From 2025-02-15, target capacity 1 is queried once per 110-minute rotation, so most `SPS` changes follow that cadence. Changes in between come from higher scores at larger target capacities.
+- From 2025-02-13, target capacity 1 is queried once per 110-minute rotation, so most `SPS` changes follow that cadence. Changes in between come from higher scores at larger target capacities.
 - From 2025-09-25, P-family GPU instances report scores above 3 while other families stay at 3 or lower. Model the two groups separately or rescale them.
 - `T2` and `T3` are carried between queries like `SPS`. The dataset README describes how they are maintained."""),
 ]

@@ -1,25 +1,24 @@
 """Rebuild SpotLake AWS snapshots with placement columns recomputed by the current logic.
 
 The stored 2025 snapshots were produced by three collector generations:
-  * until 2025-02-14, snapshots carry a target capacity 1 SPS queried every run and no T2/T3;
-    target capacities 5..50 were collected separately into s3://sps-query-data/aws/
-    (until 2025-02-14 00:10);
+  * until 2025-02-12, snapshots carry a target capacity 1 SPS queried every run and no T2/T3;
+    target capacities 5..50 were collected separately into s3://sps-query-data/aws/;
   * from 2025-02-13, one target capacity (1, 5, ..., 50) is queried per run and saved to
-    s3://spotlake/rawdata/aws/sps/; snapshots built from it (SPS/T2/T3 carried between runs)
-    start on 2025-02-15;
+    s3://spotlake/rawdata/aws/sps/, and the snapshots carry SPS between runs (the T2/T3
+    columns are written from 2025-02-15; the first two days used an earlier version of the
+    carry logic);
   * T2/T3 conditions used `== 2` / `== 3` during 2025 and SPS promotion started 2025-04-03.
 
 This script replays the per-target-capacity placement scores through the current service logic
 (`compare_max_instance`, vendored below) from a warm-up start, and rewrites every snapshot with:
   * SPS, T3, T2 recomputed for every row (all 11 columns in every file),
   * missing values written as empty cells instead of -1,
-  * exact duplicate rows removed (present from 2025-10-21),
+  * exact duplicate rows removed (present from 2025-10-20),
   * all other columns unchanged.
 
 Replay order per 10-minute slot:
-  * before CUTOVER: target capacity 1 from the snapshot's own SPS column, then the slot's
-    rotating target capacity query: the legacy file, or else the new per-target file when its
-    capacity is not 1 (2025-02-14 00:20 to 23:50 has only the new files);
+  * before CUTOVER: target capacity 1 from the snapshot's own SPS column, then the legacy
+    rotating target capacity file of the same slot, if any;
   * from CUTOVER: the single per-target file of the slot.
 Slots without a snapshot still apply their query to the state, using the previous snapshot's
 rows, but produce no output file (99 such slots in 2025).
@@ -46,7 +45,7 @@ from botocore.config import Config
 
 SNAP_BUCKET = "spotlake"
 LEGACY_BUCKET = "sps-query-data"
-CUTOVER = datetime(2025, 2, 15)   # first snapshot built by the per-target collector
+CUTOVER = datetime(2025, 2, 13)   # first snapshot built by the per-target collector
 STEP = timedelta(minutes=10)
 KEYS = ["InstanceType", "AZ"]
 COLUMNS = ["Time", "InstanceType", "Region", "AZ", "SPS", "T3", "T2",
@@ -172,10 +171,7 @@ def build_index(src, start, end):
                 (legacy if bucket == LEGACY_BUCKET else new).setdefault(t, (bucket, key, int(tc)))
     queries = {}
     for t in set(legacy) | set(new):
-        if t >= CUTOVER:
-            q = new.get(t)
-        else:
-            q = legacy.get(t) or (new[t] if t in new and new[t][2] != 1 else None)
+        q = new.get(t) if t >= CUTOVER else legacy.get(t)
         if q:
             queries[t] = q
     return snaps, queries

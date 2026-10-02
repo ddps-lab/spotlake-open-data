@@ -14,8 +14,8 @@ frequency band, the current spot price, the on-demand price, and the resulting s
 | Coverage | 2025-01-01 00:00 UTC to 2025-12-31 23:50 UTC |
 | Snapshot interval | 10 minutes |
 | Objects | 52,372 gzip-compressed CSV files (188 of 52,560 slots missing, see Known issues) |
-| Size | TBD_SIZE |
-| Rows | TBD_ROWS |
+| Size | 19.0 GB compressed (17.73 GiB) |
+| Rows | 1,766,104,605 (about 31,000 per snapshot in January to 38,000 in December) |
 | Instance types / regions / AZs | about 1,079 / 17 / 55 (2025-12-31 snapshot) |
 | Updates | None. This is a static sample. |
 | License | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
@@ -97,14 +97,14 @@ The query schedule changed once during 2025:
 
 | Period | Target capacity 1 | Target capacities 5 to 50 |
 | -- | -- | -- |
-| until 2025-02-14 | every 10 minutes | one per 10 minutes, rotating (100-minute cycle) |
-| from 2025-02-15 | one capacity per 10 minutes, rotating through 1, 5, ..., 50 (110-minute cycle) | (same rotation) |
+| until 2025-02-12 | every 10 minutes | one per 10 minutes, rotating (100-minute cycle) |
+| from 2025-02-13 | one capacity per 10 minutes, rotating through 1, 5, ..., 50 (110-minute cycle) | (same rotation) |
 
 Placement columns are state carried between queries:
 
 - `SPS` is the latest target capacity 1 score. When a larger target capacity returns a higher
   score, `SPS` is raised to it. Target capacity 1 itself is queried every 10 minutes until
-  2025-02-14 and once per 110-minute rotation from 2025-02-15, but a raise can happen at any
+  2025-02-12 and once per 110-minute rotation from 2025-02-13, but a raise can happen at any
   10-minute step.
 - `T3` (`T2`) records the largest target capacity whose score was 3 (2) or higher. When a query
   at any target capacity does not qualify, the value is capped just below that capacity (for
@@ -118,7 +118,7 @@ files are not uniform. This release rebuilds them so the whole year follows one 
 
 - **Placement columns recomputed.** `SPS`, `T2`, and `T3` were recomputed for every row by
   replaying all raw placement score queries from 2024-12-01 (warm-up) through 2025 with the
-  current SpotLake logic. Before 2025-02-15 each slot replays its target capacity 1 query and
+  current SpotLake logic. Before 2025-02-13 each slot replays its target capacity 1 query and
   then its rotating target capacity query. For the 99 slots whose snapshot is missing but whose
   query was saved, the query still updates the carried state. The replay was validated against service output
   produced by the current logic (2026-09-20 to 2026-09-26, 48.5 million rows): every `SPS`,
@@ -127,12 +127,17 @@ files are not uniform. This release rebuilds them so the whole year follows one 
 - **Uniform missing values.** The original files used `-1` for missing `IF`, prices, and
   `Savings`, and empty cells for missing scores. All missing values are now empty cells.
 - **Duplicate rows removed.** From 2025-10-20 07:40 UTC some original us-east-1 rows were
-  repeated with identical values. One copy is kept. TBD_DUPS
+  repeated with identical values. One copy is kept (3,936,398 rows removed).
 - **Two prices for one pool kept.** In a few snapshots the spot price API returned two prices
-  for the same pool. Both rows are kept, with the same `SPS`, `T2`, and `T3`. TBD_SAMEKEY
+  for the same pool. Both rows are kept, with the same `SPS`, `T2`, and `T3`. In 2025 this happens once (two pools
+  at 2025-01-27 22:00 UTC).
 - All other values are unchanged.
 
-Compared with the original files, the recomputation changed TBD_DIFFS.
+Compared with the original files, the recomputation changed `SPS` in 4,462,185 rows (0.25%),
+and `T3` and `T2` in 26,290,418 (1.68%) and 33,783,226 (2.16%) of the rows whose original file
+had these columns. Almost all `SPS` changes fall on 2025-02-13 and 2025-02-14, the first two
+days of the per-target collector, which ran an earlier version of the carry logic. `T2` and
+`T3` changes come mainly from the `== 2` and `== 3` conditions used during 2025.
 The script is [`scripts/reprocess_2025.py`](scripts/reprocess_2025.py).
 
 ## Known issues
@@ -145,7 +150,7 @@ The script is [`scripts/reprocess_2025.py`](scripts/reprocess_2025.py).
   scores from 4 to 9 for single instance type queries, while all other families stay at 3 or lower.
   This change comes from AWS and is reflected as is. AWS documents that queries with fewer than
   three instance types receive low scores, and SpotLake queries always use one.
-- **Refresh rate of `SPS`.** Target capacity 1 is queried every 10 minutes until 2025-02-14 and
+- **Refresh rate of `SPS`.** Target capacity 1 is queried every 10 minutes until 2025-02-12 and
   every 110 minutes after that, as described above.
 
 ## License
