@@ -225,9 +225,12 @@ def carry(prev, rows):
 
 
 def finalize(snap, state):
+    """Write the per-key state onto every snapshot row (a key can have several price rows)."""
     out = snap.copy()
+    by_key = state.set_index(KEYS)[["SPS", "T3", "T2"]]
+    placed = by_key.reindex(pd.MultiIndex.from_frame(snap[KEYS]))
     for c in ["SPS", "T3", "T2"]:
-        out[c] = state[c].to_numpy()
+        out[c] = placed[c].to_numpy()
     out["SPS"] = out["SPS"].where(out["SPS"] >= 0).astype("Int64")
     for c in ["T3", "T2"]:
         out[c] = out[c].where(out["SPS"].notna()).astype("Int64")
@@ -246,6 +249,7 @@ def compare_stats(t, snap, out):
             old = snap[c].where(old_sps.notna())
             stat[c.lower() + "_diff"] = int((old.fillna(-9).to_numpy() != out[c].fillna(-9).to_numpy()).sum())
     stat["t2_lt_t3"] = int((out["T2"] < out["T3"]).fillna(False).sum())
+    stat["same_key_rows"] = len(out) - len(out[KEYS].drop_duplicates())
     return stat
 
 
@@ -286,7 +290,7 @@ def main():
           f"with query={sum(1 for s in slots if s in queries)}", flush=True)
 
     args.out.mkdir(parents=True, exist_ok=True)
-    stats, carried, dup_rows, no_snapshot = [], 0, 0, 0
+    stats, carried, dup_rows, no_snapshot, conflicts = [], 0, 0, 0, 0
     prev, last_rows = None, None
     with ThreadPoolExecutor(args.workers) as loader, ThreadPoolExecutor(4) as writer:
         pending = deque()
@@ -311,15 +315,20 @@ def main():
                     prev = step(prev, last_rows, *q)
                 no_snapshot += 1
                 continue
-            # From 2025-10-21 some snapshots repeat identical rows; keep one copy.
+            # From 2025-10-20 some snapshots repeat identical rows; keep one copy.
             dup_rows += int(snap.duplicated().sum())
             snap = snap.drop_duplicates().reset_index(drop=True)
-            if snap.duplicated(KEYS).any():
-                raise ValueError(f"{t}: conflicting rows for the same InstanceType and AZ")
-            rows = last_rows = snap[["InstanceType", "Region", "AZ"]]
+            # Rarely the spot price API returns two prices for one pool in the same run. Both rows
+            # are kept; the placement state is computed once per key and applied to both.
+            if t < CUTOVER and (snap.groupby(KEYS)["SPS"].nunique(dropna=False) > 1).any():
+                # Before CUTOVER the stored SPS is a replay input; never resolve it by row order.
+                raise ValueError(f"{t}: same InstanceType and AZ with different SPS values")
+            first = snap.drop_duplicates(KEYS).reset_index(drop=True)
+            conflicts += len(snap) - len(first)
+            rows = last_rows = first[["InstanceType", "Region", "AZ"]]
 
             if t < CUTOVER:
-                tc1 = snap[["InstanceType", "Region", "AZ", "SPS"]]
+                tc1 = first[["InstanceType", "Region", "AZ", "SPS"]]
                 prev = step(prev, rows, tc1, 1)
                 if q:
                     prev = step(prev, rows, *q)
@@ -345,7 +354,8 @@ def main():
     st = pd.DataFrame(stats)
     st.to_csv(args.out / "validation.csv", index=False)
     print(f"done: written={len(st)} carried_without_query={carried} "
-          f"query_without_snapshot={no_snapshot} duplicate_rows_dropped={dup_rows}")
+          f"query_without_snapshot={no_snapshot} duplicate_rows_dropped={dup_rows} "
+          f"same_key_rows_kept={conflicts}")
     print(st.drop(columns="Time").sum().to_string())
     return 0
 

@@ -126,8 +126,10 @@ files are not uniform. This release rebuilds them so the whole year follows one 
 - **Uniform columns.** Original files before 2025-02-15 had no `T2` and `T3` columns.
 - **Uniform missing values.** The original files used `-1` for missing `IF`, prices, and
   `Savings`, and empty cells for missing scores. All missing values are now empty cells.
-- **Duplicate rows removed.** From 2025-10-21 some original snapshots repeated identical rows.
-  One copy is kept. TBD_DUPS
+- **Duplicate rows removed.** From 2025-10-20 07:40 UTC some original us-east-1 rows were
+  repeated with identical values. One copy is kept. TBD_DUPS
+- **Two prices for one pool kept.** In a few snapshots the spot price API returned two prices
+  for the same pool. Both rows are kept, with the same `SPS`, `T2`, and `T3`. TBD_SAMEKEY
 - All other values are unchanged.
 
 Compared with the original files, the recomputation changed TBD_DIFFS.
