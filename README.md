@@ -78,18 +78,51 @@ In `T2` and `T3`, `0` is a value ("no target capacity qualified"), not a missing
 
 ## How the data was collected
 
-All values come from public AWS APIs or public AWS data.
+All values come from public AWS APIs or public AWS data. Every 10 minutes the collector
+assembles a snapshot from the latest data of each source. Spot prices, interruption bands, and
+placement scores are queried at each run. On-demand prices change rarely and are refreshed
+separately, then reused by the runs that follow.
 
-| Column | Source |
-| -- | -- |
-| `SpotPrice` | EC2 [`DescribeSpotPriceHistory`](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeSpotPriceHistory.html), all regions, Linux/UNIX only, latest price at collection time. AZ names are converted to AZ IDs with [`DescribeAvailabilityZones`](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeAvailabilityZones.html). Every 10 minutes. |
-| `OndemandPrice` | AWS Price List API [`GetProducts`](https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_pricing_GetProducts.html), service code `AmazonEC2`. |
-| `IF` | [Spot Instance Advisor](https://aws.amazon.com/ec2/spot/instance-advisor/) data, read through the open source CLI [`spotinfo`](https://github.com/alexei-led/spotinfo) (`spotinfo --output csv --region all`). Every 10 minutes. |
-| `SPS`, `T2`, `T3` | EC2 [`GetSpotPlacementScores`](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_GetSpotPlacementScores.html) with `SingleAvailabilityZone=true`, one instance type per query, at target capacities 1, 5, 10, ..., 50. |
+### Coverage
 
-Spot Placement Score queries are limited per account. To cover every instance type, region,
-and target capacity, SpotLake spreads queries over several AWS accounts. Every query is an
-ordinary call to the public API, and only the returned score is stored.
+The set of pools is rebuilt every day. The collector lists every enabled region with
+[`DescribeRegions`](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeRegions.html)
+and the instance types offered in each Availability Zone with
+[`DescribeInstanceTypeOfferings`](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeInstanceTypeOfferings.html)
+(`LocationType=availability-zone`). Every (instance type, region) pair found this way is queried
+for placement scores. Spot and on-demand prices are collected for the same enabled regions,
+and interruption bands for every region that the Spot Instance Advisor data covers.
+
+### Sources and parameters
+
+| Column | API or source | How it is queried |
+| -- | -- | -- |
+| `SpotPrice` | EC2 [`DescribeSpotPriceHistory`](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeSpotPriceHistory.html) | Every enabled region, with `StartTime` one microsecond before `EndTime` (the time of the regional query), which returns the price in effect at that moment. AWS also returns any change inside that window, so rarely a pool has two prices (see [Processing applied](#processing-applied-for-this-release)). Only `Linux/UNIX` entries are kept. AZ names are converted to AZ IDs with [`DescribeAvailabilityZones`](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeAvailabilityZones.html). |
+| `OndemandPrice` | AWS Price List API [`GetProducts`](https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_pricing_GetProducts.html) | Service code `AmazonEC2`, per region, filtered to `operatingSystem=Linux`, `tenancy=Shared`, `preInstalledSw=NA`, `licenseModel=No License required`, `capacitystatus=Used`. Hourly on-demand price in USD. |
+| `IF` | [Spot Instance Advisor](https://aws.amazon.com/ec2/spot/instance-advisor/) data | Read through the open source CLI [`spotinfo`](https://github.com/alexei-led/spotinfo) (`spotinfo --output csv --region all`). The Advisor's interruption bands are mapped to grades: <5% = 3.0, 5-10% = 2.5, 10-15% = 2.0, 15-20% = 1.5, >20% = 1.0. |
+| `SPS`, `T2`, `T3` | EC2 [`GetSpotPlacementScores`](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_GetSpotPlacementScores.html) | `InstanceTypes` with a single instance type, `RegionNames` with a group of regions, `SingleAvailabilityZone=true` (one score per AZ), and `TargetCapacity` from 1, 5, 10, ..., 50. See [Placement columns](#placement-columns). |
+| `Savings` | computed | `100 - SpotPrice / OndemandPrice * 100`, truncated to an integer. |
+
+The sources are combined with outer joins: placement scores, interruption bands, and
+on-demand prices on instance type and region, and spot prices on instance type and AZ. A pool
+missing from one source keeps that source's columns empty. Rows without an instance type,
+region, or AZ are dropped.
+
+### Placement score queries
+
+A `GetSpotPlacementScores` response lists the top ten scored AZs per page, and AWS may limit
+the number of new request configurations an account makes within 24 hours
+([Spot placement score limitations](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-placement-score.html#sps-limitations)).
+SpotLake therefore organizes its calls as follows:
+
+- For each instance type, the regions offering it are grouped by bin packing so that each
+  call covers at most ten AZs, which is meant to fit all of its AZ scores in the first page.
+- Calls are grouped into batches of up to 50, and the batches are distributed across multiple AWS
+  accounts. Every call is an ordinary request to the public API, and only the returned scores
+  are stored.
+
+SpotLake queries one instance type per call. AWS documents that a request with fewer than
+three instance types receives a lower score, so these scores describe single-type requests.
 
 ### Placement columns
 
