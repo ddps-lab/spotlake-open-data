@@ -18,7 +18,7 @@ frequency band, the current spot price, the on-demand price, and the resulting s
 | Rows | 1,766,104,605 (about 31,000 per snapshot in January to 38,000 in December) |
 | Instance types / regions / AZs | about 1,079 / 17 / 55 (2025-12-31 snapshot) |
 | Updates | None. This is a static sample. |
-| License | [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) (non-commercial use) |
+| License | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 
 ## Accessing the data
 
@@ -189,9 +189,7 @@ The script is [`scripts/reprocess_2025.py`](scripts/reprocess_2025.py).
 ## License
 
 The dataset is released under the
-[Creative Commons Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0)](https://creativecommons.org/licenses/by-nc/4.0/).
-You may use, share, and adapt the data for non-commercial purposes with attribution.
-For commercial use, contact spotlake@hanyang.ac.kr.
+[Creative Commons Attribution 4.0 International License (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
 
 ## Citation
 
