@@ -4,9 +4,9 @@ Description: |
   This dataset is a one-year sample of its AWS data: every 10-minute snapshot of 2025. For each
   instance type and Availability Zone on the AWS spot market, a snapshot records the Spot Placement
   Score, the Spot Instance Advisor interruption frequency band, the spot price, the on-demand price,
-  and the resulting savings. All values come from public AWS APIs and public AWS data, and the
-  collection method is documented. The data supports research on spot instance availability,
-  pricing dynamics, and capacity-aware scheduling.
+  and the resulting savings. All values come from public AWS APIs and data, and the collection
+  method is documented. It supports research on spot availability, pricing dynamics, and
+  capacity-aware scheduling.
 Documentation: https://github.com/ddps-lab/spotlake-open-data
 Contact: spotlake@hanyang.ac.kr
 ManagedBy: "[DDPS Lab, Hanyang University](https://ddps.cloud)"
