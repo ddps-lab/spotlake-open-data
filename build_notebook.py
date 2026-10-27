@@ -1,7 +1,11 @@
 """Generate get-to-know-a-dataset.ipynb from the AWS Open Data template structure.
 
-Edit the cells here and rerun, so the notebook stays reviewable as plain Python.
+Edit the cells here and rerun, so the notebook stays reviewable as plain Python. Pass --execute
+to also run the cells against the public bucket and keep their outputs, so GitHub renders the
+tables and figures.
 """
+import argparse
+import os
 from pathlib import Path
 
 import nbformat as nbf
@@ -162,5 +166,13 @@ nb = nbf.v4.new_notebook()
 nb["cells"] = cells
 nb["metadata"] = {"kernelspec": {"name": "python3", "display_name": "Python 3", "language": "python"}}
 out = Path(__file__).resolve().parent / "get-to-know-a-dataset.ipynb"
+ap = argparse.ArgumentParser()
+ap.add_argument("--execute", action="store_true", help="run the cells and store their outputs")
+if ap.parse_args().execute:
+    from nbclient import NotebookClient
+    for var in ("SPOTLAKE_BUCKET", "SPOTLAKE_PREFIX", "SPOTLAKE_PROFILE"):
+        os.environ.pop(var, None)        # the stored outputs must come from the public bucket
+    NotebookClient(nb, timeout=900, kernel_name="python3", record_timing=False,
+                   resources={"metadata": {"path": str(out.parent)}}).execute()
 nbf.write(nb, out)
 print(f"wrote {out}")
