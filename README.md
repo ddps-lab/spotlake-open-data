@@ -72,7 +72,7 @@ Every file has the same 11 columns. Missing values are empty cells.
 | `IF` | float | Spot Instance Advisor interruption frequency band of the (region, instance type), as a grade: `3.0` = <5%, `2.5` = 5-10%, `2.0` = 10-15%, `1.5` = 15-20%, `1.0` = >20%. Identical across AZs of a region. Empty if not listed. |
 | `OndemandPrice` | float | On-demand Linux price, USD per hour. Empty if not sold on demand. |
 | `SpotPrice` | float | Current spot price, USD per hour, Linux/UNIX. Empty if unavailable. |
-| `Savings` | integer | `100 - SpotPrice / OndemandPrice * 100`, truncated to an integer percent. Empty if either price is missing. |
+| `Savings` | integer | `100 - SpotPrice * 100 / OndemandPrice`, truncated toward zero to an integer percent, so a spot price slightly above the on-demand price gives `0`. Empty if either price is missing. |
 
 In `T2` and `T3`, `0` is a value ("no target capacity qualified"), not a missing value.
 
@@ -80,8 +80,8 @@ In `T2` and `T3`, `0` is a value ("no target capacity qualified"), not a missing
 
 All values come from public AWS APIs or public AWS data. Every 10 minutes the collector
 assembles a snapshot from the latest data of each source. Spot prices, interruption bands, and
-placement scores are queried at each run. On-demand prices change rarely and are refreshed
-separately, then reused by the runs that follow.
+placement scores are queried at each run. On-demand prices change rarely and are collected
+once a day; the snapshots of the following UTC day reuse that table.
 
 ### Coverage
 
@@ -101,7 +101,7 @@ and interruption bands for every region that the Spot Instance Advisor data cove
 | `OndemandPrice` | AWS Price List API [`GetProducts`](https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_pricing_GetProducts.html) | Service code `AmazonEC2`, per region, filtered to `operatingSystem=Linux`, `tenancy=Shared`, `preInstalledSw=NA`, `licenseModel=No License required`, `capacitystatus=Used`. Hourly on-demand price in USD. |
 | `IF` | [Spot Instance Advisor](https://aws.amazon.com/ec2/spot/instance-advisor/) data | Read through the open source CLI [`spotinfo`](https://github.com/alexei-led/spotinfo) (`spotinfo --output csv --region all`). The Advisor's interruption bands are mapped to grades: <5% = 3.0, 5-10% = 2.5, 10-15% = 2.0, 15-20% = 1.5, >20% = 1.0. |
 | `SPS`, `T2`, `T3` | EC2 [`GetSpotPlacementScores`](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_GetSpotPlacementScores.html) | `InstanceTypes` with a single instance type, `RegionNames` with a group of regions, `SingleAvailabilityZone=true` (one score per AZ), and `TargetCapacity` from 1, 5, 10, ..., 50. See [Placement columns](#placement-columns). |
-| `Savings` | computed | `100 - SpotPrice / OndemandPrice * 100`, truncated to an integer. |
+| `Savings` | computed | `100 - SpotPrice * 100 / OndemandPrice`, truncated toward zero to an integer. |
 
 The sources are combined with outer joins: placement scores, interruption bands, and
 on-demand prices on instance type and region, and spot prices on instance type and AZ. A pool

@@ -73,7 +73,7 @@ Every file has the same 11 columns:
 
 Missing values are empty cells, which `pandas` reads as `NaN`. In `T2` and `T3`, `0` is not missing: it means no target capacity qualified.
 
-Prices and `IF` are refreshed every 10 minutes. Placement scores are carried forward between queries: target capacity 1 is queried every 10 minutes until 2025-02-12 and every 110 minutes after that, and a higher score at a larger target capacity can raise `SPS` at any 10-minute step. The dataset README explains the collection schedule and how `T2` and `T3` were recomputed.
+Spot prices and `IF` are refreshed every 10 minutes, and on-demand prices once a day. Placement scores are carried forward between queries: target capacity 1 is queried every 10 minutes until 2025-02-12 and every 110 minutes after that, and a higher score at a larger target capacity can raise `SPS` at any 10-minute step. The dataset README explains the collection schedule and how `T2` and `T3` were recomputed.
 
 For analysis across many snapshots, Amazon Athena can query the CSV files in place, and AWS Glue can convert them to Parquet in your own account."""),
     md("""### Q: Can you show us an example of downloading and loading data from your dataset?
