@@ -41,7 +41,9 @@ import boto3
 import matplotlib.pyplot as plt
 import pandas as pd
 from botocore import UNSIGNED
-from botocore.config import Config"""),
+from botocore.config import Config
+from matplotlib.colors import ListedColormap
+from matplotlib.patches import Patch"""),
     md("Next, we define the location of the dataset and create an S3 client. The bucket is public, so requests do not need to be signed."),
     code("""bucket = os.environ.get("SPOTLAKE_BUCKET", "spotlake-open-data")
 prefix = os.environ.get("SPOTLAKE_PREFIX", "data/aws/2025/")
@@ -107,27 +109,41 @@ ax.set_ylabel("Savings over on-demand (%)")
 ax.set_title("Spot savings per pool, 2025-06-15 12:00 UTC")
 ax.grid(axis="y", alpha=0.3)
 plt.show()"""),
-    md("Prices and placement scores move during the day. We load the 24 hourly snapshots of the same day and pick the instance type and region whose placement scores changed most often, then plot every Availability Zone of it."),
+    md("Prices and placement scores move during the day. We load the 24 hourly snapshots of the same day and pick the instance type and region whose placement scores changed most often. The top panel shows the spot price of each Availability Zone; the bottom panel shows the placement scores as a grid with one row per Availability Zone, since the scores take only a few discrete values."),
     code("""hourly = [prefix + f"06/15/{h:02d}-00-00.csv.gz" for h in range(24)]
 with ThreadPoolExecutor(8) as pool:
     day = pd.concat(pool.map(load, hourly), ignore_index=True)
-day["Time"] = pd.to_datetime(day.Time)
+day["Hour"] = pd.to_datetime(day.Time).dt.hour
 
-changes = (day.sort_values("Time")
+changes = (day.sort_values("Hour")
            .groupby(["InstanceType", "Region", "AZ"]).SPS
            .apply(lambda x: (x.diff().fillna(0) != 0).sum())
            .groupby(level=["InstanceType", "Region"]).sum())
 itype, region = changes.idxmax()
 pool_df = day[(day.InstanceType == itype) & (day.Region == region)]
+scores = (pool_df.pivot_table(index="AZ", columns="Hour", values="SPS")
+          .reindex(index=sorted(pool_df.AZ.unique()), columns=range(24)))
 
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
-for az, g in pool_df.groupby("AZ"):
-    ax1.step(g.Time, g.SpotPrice, where="post", label=az)
-    ax2.step(g.Time, g.SPS, where="post", label=az)
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6), sharex=True,
+                               gridspec_kw={"height_ratios": [3, 2]})
+for az, g in pool_df.sort_values("Hour").groupby("AZ"):
+    # Extend the last hourly price to 24:00 so the step covers the same span as the grid below.
+    ax1.step(list(g.Hour) + [24], list(g.SpotPrice) + [g.SpotPrice.iloc[-1]], where="post", label=az)
 ax1.set_ylabel("Spot price (USD/h)")
-ax2.set_ylabel("Placement score")
 ax1.set_title(f"{itype} in {region}, 2025-06-15 (hourly)")
 ax1.legend(ncol=3, fontsize=8)
+
+colors = ["#d62728", "#ff7f0e", "#2ca02c"]  # score 1, 2, 3
+ax2.pcolormesh(range(25), range(len(scores) + 1), scores.to_numpy(),
+               cmap=ListedColormap(colors), vmin=0.5, vmax=3.5, edgecolors="white", linewidth=0.5)
+ax2.set_yticks([i + 0.5 for i in range(len(scores))], scores.index)
+ax2.invert_yaxis()  # first AZ on top, as in the legend above
+ax2.set_xticks(range(0, 25, 3), [f"{h:02d}:00" for h in range(0, 25, 3)])
+ax2.set_xlim(0, 24)
+ax2.set_xlabel("Hour (UTC)")
+ax2.set_ylabel("Placement score")
+ax2.legend(handles=[Patch(color=c, label=s) for c, s in zip(colors, [1, 2, 3])],
+           title="SPS", ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.3))
 plt.show()"""),
     md("""### Q: What is one question that you have answered using these data? Can you show us how you came to that answer?
 
